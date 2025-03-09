@@ -3,7 +3,7 @@
  *
  * @Deno-PLC / Adapter-OSC
  *
- * Copyright (C) 2024 Hans Schallmoser
+ * Copyright (C) 2024 - 2025 Hans Schallmoser
  *
  * This program is free software: you can redistribute it and/or modify
  * it under the terms of the GNU General Public License as published by
@@ -18,26 +18,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { assert } from "@std/assert/assert";
+import { ASCII } from "./ascii.ts";
+
 export type OSCArg = string | number | boolean | Uint8Array;
 export type OSCArgs = readonly OSCArg[];
-
-/**
- * Stores an array of Uint8Arrays
- */
-class VariableUint8Array extends Array<Uint8Array> {
-    public pack() {
-        const length = this.reduce((prev, curr) => prev + curr.length, 0);
-        const res = new Uint8Array(length);
-        let i = 0;
-        for (const arr of this) {
-            for (const item of arr) {
-                res[i] = item;
-                i++;
-            }
-        }
-        return res;
-    }
-}
 
 /**
  * Might be thrown during {@link encodeOSC} and {@link decodeOSC} if the supplied data is invalid.
@@ -52,14 +37,14 @@ export class OSCProtocolError extends Error {
             packet?: Uint8Array;
         },
     ) {
-        super(desc.message);
+        super(`${desc.message} (addr: ${desc.addr})`);
     }
 }
 
 /**
  * Parses an OSC packet. Might throw {@link OSCProtocolError} if the supplied data is invalid
  */
-export function decodeOSC(data: Uint8Array): [string, OSCArgs] {
+export function decodeOSC(data: Uint8Array): [addr: string, args: OSCArgs] {
     if (data.length % 4 !== 0) {
         throw new OSCProtocolError({
             message: `data.length % 4 !== 0`,
@@ -68,195 +53,283 @@ export function decodeOSC(data: Uint8Array): [string, OSCArgs] {
     }
     if (data.length < 8) {
         throw new OSCProtocolError({
-            message: `data.length < 8`,
+            message: `Packet too short (length < 8)`,
             packet: data,
         });
     }
 
-    let pos = -1;
-    function consumeToken() {
-        pos++;
-        return data[pos] ?? 0;
-    }
+    const td = new TextDecoder();
+    const dv = new DataView(data.buffer, data.byteOffset, data.byteLength);
 
-    function oscMemcpy(view: Uint8Array) {
-        for (let i = view.length - 1; i >= 0; i--) {
-            view[i] = consumeToken();
-        }
-    }
+    const addr_end = data.indexOf(ASCII.NULL);
+    const addr = td.decode(
+        new Uint8Array(data.buffer, data.byteOffset, addr_end),
+    );
+    let offset = align4(addr_end + 1);
 
-    function* oscStringGen() {
-        let terminated = false;
-        while (!terminated) { // break on \0
-            for (let i = 0; i < 4; i++) {
-                const token = consumeToken();
-                if (token === 0) {
-                    terminated = true;
-                } else {
-                    yield token;
-                }
-            }
-        }
-    }
-    function oscString() {
-        return new TextDecoder().decode(new Uint8Array(oscStringGen()));
-    }
+    const tt_offset = offset;
+    const tt_end = data.indexOf(ASCII.NULL, tt_offset);
+    offset = align4(tt_end + 1);
 
-    function oscBlob() {
-        const size = oscInt();
-        const view = new Uint8Array(size);
-        oscMemcpy(view);
-        for (let i = 0; i < pad(size); i++) {
-            consumeToken();
-        }
-        return view;
-    }
-
-    function oscInt() {
-        const view = new ArrayBuffer(4);
-        oscMemcpy(new Uint8Array(view));
-        return new Int32Array(view)[0]!;
-    }
-
-    function oscFloat() {
-        const view = new ArrayBuffer(4);
-        oscMemcpy(new Uint8Array(view));
-        return new Float32Array(view)[0]!;
-    }
-
-    function oscDouble() {
-        const view = new ArrayBuffer(8);
-        oscMemcpy(new Uint8Array(view));
-        return new Float64Array(view)[0]!;
-    }
-
-    const addr = oscString();
-
-    if (addr.charAt(0) !== "/") {
+    if (data[tt_offset] !== ASCII.COMMA) {
         throw new OSCProtocolError({
-            message: `addr[0] != '/'`,
+            message: `invalid type tag`,
             packet: data,
+            addr,
         });
     }
 
-    const typeTag = [...oscString()];
+    const args: OSCArg[] = Array(tt_end - tt_offset - 1);
 
-    if (typeTag.shift() !== ",") {
-        throw new OSCProtocolError({
-            message: `missing type tag`,
-            packet: data,
-        });
-    }
-
-    function* argsGen() {
-        for (const argType of typeTag) {
-            switch (argType) {
-                case "s":
-                    yield oscString();
-                    break;
-                case "i":
-                    yield oscInt();
-                    break;
-                case "b":
-                    yield oscBlob();
-                    break;
-                case "f":
-                    yield oscFloat();
-                    break;
-                case "d":
-                    yield oscDouble();
-                    break;
-                case "T":
-                    yield true;
-                    break;
-                case "F":
-                    yield false;
-                    break;
+    for (let i = 0, ti = tt_offset + 1; ti < tt_end; (i++, ti++)) {
+        switch (data[ti]) {
+            case ASCII.s: {
+                const end = data.indexOf(ASCII.NULL, offset);
+                args[i] = td.decode(
+                    new Uint8Array(
+                        data.buffer,
+                        data.byteOffset + offset,
+                        end - offset,
+                    ),
+                );
+                offset = align4(end + 1);
+                break;
             }
+            case ASCII.i:
+                args[i] = dv.getInt32(offset, false);
+                offset += 4;
+                break;
+            case ASCII.b: {
+                const len = dv.getInt32(offset, false);
+                offset += 4;
+                args[i] = data.slice(offset, offset + len);
+                offset += align4(len);
+                break;
+            }
+            case ASCII.f:
+                args[i] = dv.getFloat32(offset, false);
+                offset += 4;
+                break;
+            case ASCII.d:
+                args[i] = dv.getFloat64(offset, false);
+                offset += 8;
+                break;
+            case ASCII.T:
+                args[i] = true;
+                break;
+            case ASCII.F:
+                args[i] = false;
+                break;
         }
     }
 
-    const args = [...argsGen()];
     return [addr, args] as const;
 }
 
+export interface OSCEncoderOptions {
+    /**
+     * The number of bytes to add to the packet size. This is required for multibyte UTF-8 characters.
+     */
+    oversize?: number;
+
+    /**
+     * Use double precision floating point numbers (64-bit) instead of single precision (32-bit) for numbers
+     */
+    f64?: boolean;
+}
+
 /**
- * Generate an OSC packet. Might throw {@link OSCProtocolError} if the supplied data is invalid
+ * Generate an OSC packet. Might throw {@link OSCProtocolError} if the supplied data is invalid. This will throw an error if any string contains non-ASCII (multi-byte) characters.
  */
-export function encodeOSC(addr: string, args: OSCArgs = []): Uint8Array {
-    if (addr.charAt(0) !== "/") {
+export function encodeOSC(
+    addr: string,
+    args: OSCArgs = [],
+    options?: OSCEncoderOptions,
+): Uint8Array {
+    const te = new TextEncoder();
+    const tt = new Uint8Array(args.length);
+
+    let packet_size = align4(addr.length + 1) + align4(tt.length + 2);
+
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === true) {
+            tt[i] = ASCII.T;
+        } else if (args[i] === false) {
+            tt[i] = ASCII.F;
+        } else if (typeof args[i] === "string") {
+            tt[i] = ASCII.s;
+            const len = (args[i] as string).length;
+            packet_size += align4(len + 1);
+        } else if (typeof args[i] === "number") {
+            if (isInt(args[i] as number)) {
+                tt[i] = ASCII.i;
+                packet_size += 4;
+            } else if (options?.f64) {
+                tt[i] = ASCII.d;
+                packet_size += 8;
+            } else {
+                tt[i] = ASCII.f;
+                packet_size += 4;
+            }
+        } else if (args[i] instanceof Uint8Array) {
+            tt[i] = ASCII.b;
+            const len = (args[i] as Uint8Array).length;
+            packet_size += align4(len) + 4;
+        }
+    }
+
+    const packet = new Uint8Array(packet_size + (options?.oversize ?? 0));
+    const dv = new DataView(packet.buffer);
+
+    let offset = align4(te.encodeInto(addr, packet).written + 1);
+
+    packet[offset] = ASCII.COMMA;
+    packet.set(tt, offset + 1);
+    offset = align4(offset + tt.length + 2);
+
+    for (let i = 0; i < args.length; i++) {
+        switch (tt[i]) {
+            case ASCII.s: {
+                // we known that packet has an byteOffset of 0
+                const { written } = te.encodeInto(
+                    args[i] as string,
+                    new Uint8Array(packet.buffer, offset),
+                );
+                offset += align4(written + 1);
+                break;
+            }
+            case ASCII.i: {
+                dv.setInt32(offset, args[i] as number, false);
+                offset += 4;
+                break;
+            }
+            case ASCII.f: {
+                dv.setFloat32(offset, args[i] as number, false);
+                offset += 4;
+                break;
+            }
+            case ASCII.d: {
+                dv.setFloat64(offset, args[i] as number, false);
+                offset += 8;
+                break;
+            }
+            case ASCII.b: {
+                const blob = args[i] as Uint8Array;
+                dv.setInt32(offset, blob.length, false);
+                offset += 4;
+                packet.set(blob, offset);
+                offset += align4(blob.length);
+                break;
+            }
+        }
+    }
+
+    if (offset > packet.byteLength) {
         throw new OSCProtocolError({
-            message: `addr[0] != '/'`,
+            message:
+                `more ${offset} bytes written than expected (${packet.byteLength})`,
             args,
             addr,
         });
     }
-    const data = new VariableUint8Array();
 
-    function oscString(str: string) {
-        const data = new VariableUint8Array();
-        const content = new TextEncoder().encode(str);
-        if (content.includes(0)) {
-            throw new OSCProtocolError({
-                message: `string '${str}' contains illegal characters (\\0)`,
-                args,
-                addr,
-            });
+    return new Uint8Array(packet.buffer, 0, offset);
+}
+
+/**
+ * Same as {@link encodeOSC}, but handles UTF-8 multibyte characters without any configuration. Might throw {@link OSCProtocolError} if the supplied data is invalid.
+ */
+export function encodeOSC_UTF8(
+    addr: string,
+    args: OSCArgs = [],
+    options?: OSCEncoderOptions,
+): Uint8Array {
+    const te = new TextEncoder();
+    const tt = new Uint8Array(args.length);
+
+    const addr_enc = te.encode(addr);
+
+    const tt_start = align4(addr_enc.length + 1);
+    const tt_end_offset = align4(tt_start + tt.length + 2);
+
+    let packet_size = tt_end_offset;
+
+    const str_args: Uint8Array[] = [];
+
+    for (let i = 0; i < args.length; i++) {
+        if (args[i] === true) {
+            tt[i] = ASCII.T;
+        } else if (args[i] === false) {
+            tt[i] = ASCII.F;
+        } else if (typeof args[i] === "string") {
+            tt[i] = ASCII.s;
+            const enc = te.encode(args[i] as string);
+            str_args.push(enc);
+            packet_size += align4(enc.length + 1);
+        } else if (typeof args[i] === "number") {
+            if (isInt(args[i] as number)) {
+                tt[i] = ASCII.i;
+                packet_size += 4;
+            } else if (options?.f64) {
+                tt[i] = ASCII.d;
+                packet_size += 8;
+            } else {
+                tt[i] = ASCII.f;
+                packet_size += 4;
+            }
+        } else if (args[i] instanceof Uint8Array) {
+            tt[i] = ASCII.b;
+            const len = (args[i] as Uint8Array).length;
+            packet_size += align4(len) + 4;
         }
-        data.push(content);
-        data.push(new Uint8Array(pad(content.length, 1)));
-        return ["s", data.pack()] as const;
     }
-    function oscInt(int: number) {
-        const buf = new ArrayBuffer(4);
-        new Int32Array(buf)[0] = int;
-        return ["i", new Uint8Array(buf).reverse()] as const;
-    }
-    function oscFloat(int: number) {
-        const buf = new ArrayBuffer(4);
-        new Float32Array(buf)[0] = int;
-        return ["f", new Uint8Array(buf).reverse()] as const;
-    }
-    // function oscDouble(int: number) {
-    //     const buf = new ArrayBuffer(8);
-    //     new Float64Array(buf)[0] = int;
-    //     return ["d", new Uint8Array(buf)] as const;
-    // }
 
-    function* argsGen() {
-        for (const arg of args) {
-            if (typeof arg === "string") {
-                yield oscString(arg);
-            } else if (arg === true) {
-                yield ["T", new Uint8Array(0)] as const;
-            } else if (arg === false) {
-                yield ["F", new Uint8Array(0)] as const;
-            } else if (typeof arg === "number") {
-                if (isInt(arg)) {
-                    yield oscInt(arg);
-                } else {
-                    yield oscFloat(arg);
-                }
+    const packet = new Uint8Array(packet_size);
+    const dv = new DataView(packet.buffer);
+
+    packet.set(addr_enc, 0);
+    packet[tt_start] = ASCII.COMMA;
+    packet.set(tt, tt_start + 1);
+
+    let offset = tt_end_offset;
+
+    for (let i = 0; i < args.length; i++) {
+        switch (tt[i]) {
+            case ASCII.s: {
+                const str = str_args.shift()!;
+                packet.set(str, offset);
+                offset += align4(str.length + 1);
+                break;
+            }
+            case ASCII.i: {
+                dv.setInt32(offset, args[i] as number, false);
+                offset += 4;
+                break;
+            }
+            case ASCII.f: {
+                dv.setFloat32(offset, args[i] as number, false);
+                offset += 4;
+                break;
+            }
+            case ASCII.d: {
+                dv.setFloat64(offset, args[i] as number, false);
+                offset += 8;
+                break;
+            }
+            case ASCII.b: {
+                const blob = args[i] as Uint8Array;
+                dv.setInt32(offset, blob.length, false);
+                offset += 4;
+                packet.set(blob, offset);
+                offset += align4(blob.length);
+                break;
             }
         }
     }
 
-    const typeTag = [","];
+    assert(offset === packet_size);
 
-    const argData = [...argsGen()];
-
-    for (const [type] of argData) {
-        typeTag.push(type);
-    }
-
-    data.push(oscString(addr)[1]);
-    data.push(oscString(typeTag.join(""))[1]);
-
-    for (const [, arg] of argData) {
-        data.push(arg);
-    }
-
-    return data.pack();
+    return new Uint8Array(packet.buffer, 0, offset);
 }
 
 function isInt(num: number) {
@@ -264,8 +337,8 @@ function isInt(num: number) {
 }
 
 /**
- * computes the necessary padding to align at 4byte
+ * Aligns a number to the next multiple of 4
  */
-export function pad(content: number, minPad = 0): number {
-    return (4 - ((content + minPad) % 4)) % 4 + minPad;
+export function align4(x: number): number {
+    return ((x | 0) + 3) & -4;
 }

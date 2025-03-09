@@ -18,10 +18,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { assertEquals } from "@std/assert";
-import { decodeOSC, encodeOSC, type OSCArgs, pad } from "./oscProtocol.ts";
+import { assert, assertEquals } from "@std/assert";
+import {
+    align4,
+    decodeOSC,
+    encodeOSC,
+    encodeOSC_UTF8,
+    type OSCArgs,
+} from "./oscProtocol.ts";
+import { decodeOSCSlow, encodeOSCSlow, pad } from "./oscProtocol.slow.ts";
 
-Deno.test("osc padding", () => {
+Deno.test("padding (slow)", () => {
     // minPad 0
     assertEquals(pad(0), 0);
     assertEquals(pad(1), 3);
@@ -39,12 +46,68 @@ Deno.test("osc padding", () => {
     assertEquals(pad(5, 1), 3);
 });
 
-function encodeDecode(addr: string, args: OSCArgs) {
-    const [addr2, args2] = decodeOSC(encodeOSC(addr, args));
-    assertEquals(addr, addr2);
-    assertEquals(args, args2);
-}
+Deno.test("align4", () => {
+    for (let x = 0; x < 100; x++) {
+        const aligned = align4(x);
+        assert((aligned & 0b11) === 0, "not aligned at 4");
+        assert(aligned >= x);
+        assert(aligned < x + 4);
+    }
+});
 
-Deno.test("osc encode/decode equals", () => {
-    encodeDecode("/abc", []);
+const testPackets: [addr: string, args: OSCArgs][] = [
+    ["/foo/bar/1", []],
+    ["/foo/bar/2", ["baz", 123, true]],
+    ["/foo/bar/3", ["baz2", 2.5, true]],
+    ["/foo/bar", ["baz", new Uint8Array([1, 2, 3, 4, 5])]],
+];
+const encodedPackets: Uint8Array[] = testPackets.map(([addr, args]) =>
+    encodeOSCSlow(addr, args)
+);
+
+Deno.test("encode equals", () => {
+    for (const [addr, args] of testPackets) {
+        assertEquals(encodeOSC(addr, args), encodeOSCSlow(addr, args));
+    }
+});
+
+Deno.test("encode equals (f64)", () => {
+    for (const [addr, args] of testPackets) {
+        const o = {
+            f64: true,
+        };
+        assertEquals(encodeOSC(addr, args, o), encodeOSCSlow(addr, args, o));
+        assertEquals(
+            encodeOSC_UTF8(addr, args, o),
+            encodeOSCSlow(addr, args, o),
+        );
+    }
+});
+
+Deno.test("encode equals (UTF-8)", () => {
+    for (const [addr, args] of testPackets) {
+        assertEquals(encodeOSC_UTF8(addr, args), encodeOSCSlow(addr, args));
+    }
+});
+
+Deno.test("decode equals", () => {
+    for (const packet of encodedPackets) {
+        assertEquals(decodeOSC(packet), decodeOSCSlow(packet));
+    }
+});
+
+Deno.test("encode/decode equals (slow)", () => {
+    for (const [addr, args] of testPackets) {
+        const [addr2, args2] = decodeOSCSlow(encodeOSCSlow(addr, args));
+        assertEquals(addr2, addr);
+        assertEquals(args2, args);
+    }
+});
+
+Deno.test("encode/decode equals", () => {
+    for (const [addr, args] of testPackets) {
+        const [addr2, args2] = decodeOSC(encodeOSC(addr, args));
+        assertEquals(addr2, addr);
+        assertEquals(args2, args);
+    }
 });

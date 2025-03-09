@@ -1,51 +1,64 @@
 {
-  "version": "3",
-  "packages": {
-    "specifiers": {
-      "jsr:@deno-plc/adapter-tcp@^1.0.2": "jsr:@deno-plc/adapter-tcp@1.0.2",
-      "jsr:@deno-plc/slip@^1.2.1": "jsr:@deno-plc/slip@1.2.1",
-      "jsr:@std/assert@^0.224.0": "jsr:@std/assert@0.224.0",
-      "jsr:@std/fmt@^0.224.0": "jsr:@std/fmt@0.224.0",
-      "jsr:@std/internal@^0.224.0": "jsr:@std/internal@0.224.0",
-      "npm:@preact/signals-core@1.6.0": "npm:@preact/signals-core@1.6.0"
+  "version": "4",
+  "specifiers": {
+    "jsr:@deno-plc/adapter-tcp@^1.1.0": "1.1.0",
+    "jsr:@deno-plc/signals@^0.0.2": "0.0.2",
+    "jsr:@deno-plc/slip@^1.3.0": "1.3.0",
+    "jsr:@logtape/logtape@~0.8.2": "0.8.2",
+    "jsr:@std/assert@^1.0.11": "1.0.11",
+    "jsr:@std/internal@^1.0.5": "1.0.5",
+    "npm:@preact/signals@^2.0.1": "2.0.1_preact@10.26.3"
+  },
+  "jsr": {
+    "@deno-plc/adapter-tcp@1.1.0": {
+      "integrity": "7261bc473e0514523f974112f1d6bd4b056bc0d6c280645a9c2e2503e674cc6f",
+      "dependencies": [
+        "jsr:@deno-plc/signals",
+        "jsr:@logtape/logtape"
+      ]
     },
-    "jsr": {
-      "@deno-plc/adapter-tcp@1.0.2": {
-        "integrity": "f07feec71834a572d2da0d38815c2aa3a4bf614b310a222b46c939bfc0158e4b",
-        "dependencies": [
-          "npm:@preact/signals-core@1.6.0"
-        ]
-      },
-      "@deno-plc/slip@1.2.1": {
-        "integrity": "1b279bef68cd66f7385c26d82e15da5772f42674b7c3768a0492dfbaee417715"
-      },
-      "@std/assert@0.224.0": {
-        "integrity": "8643233ec7aec38a940a8264a6e3eed9bfa44e7a71cc6b3c8874213ff401967f",
-        "dependencies": [
-          "jsr:@std/fmt@^0.224.0",
-          "jsr:@std/internal@^0.224.0"
-        ]
-      },
-      "@std/fmt@0.224.0": {
-        "integrity": "e20e9a2312a8b5393272c26191c0a68eda8d2c4b08b046bad1673148f1d69851"
-      },
-      "@std/internal@0.224.0": {
-        "integrity": "afc50644f9cdf4495eeb80523a8f6d27226b4b36c45c7c195dfccad4b8509291"
-      }
+    "@deno-plc/signals@0.0.2": {
+      "integrity": "8ad0c2d29b8a657059ee5f53b5cadad08c9d1b1b659c93dd04e5b9d4ff6e0cc6",
+      "dependencies": [
+        "npm:@preact/signals"
+      ]
     },
-    "npm": {
-      "@preact/signals-core@1.6.0": {
-        "integrity": "sha512-O/XGxwP85h1F7+ouqTMOIZ3+V1whfaV9ToIVcuyGriD4JkSD00cQo54BKdqjvBJxbenvp7ynfqRHEwI6e+NIhw==",
-        "dependencies": {}
-      }
+    "@deno-plc/slip@1.3.0": {
+      "integrity": "ec9e6b016743ea98a8a90a2c0aea1c1a9236e1f6a66cb6d9a360a9c1a2e0a9bf"
+    },
+    "@logtape/logtape@0.8.2": {
+      "integrity": "e2ae1fc2561e8d010359b9894efb39bdb559dae44f5824540cbb26a78eee36bc"
+    },
+    "@std/assert@1.0.11": {
+      "integrity": "2461ef3c368fe88bc60e186e7744a93112f16fd110022e113a0849e94d1c83c1",
+      "dependencies": [
+        "jsr:@std/internal"
+      ]
+    },
+    "@std/internal@1.0.5": {
+      "integrity": "54a546004f769c1ac9e025abd15a76b6671ddc9687e2313b67376125650dc7ba"
     }
   },
-  "remote": {},
+  "npm": {
+    "@preact/signals-core@1.8.0": {
+      "integrity": "sha512-OBvUsRZqNmjzCZXWLxkZfhcgT+Fk8DDcT/8vD6a1xhDemodyy87UJRJfASMuSD8FaAIeGgGm85ydXhm7lr4fyA=="
+    },
+    "@preact/signals@2.0.1_preact@10.26.3": {
+      "integrity": "sha512-f9p/utMgttPb9bJ+UgRBkTDZ9uQiZfX1/gV3pXGWz+yGNQj8MrnG55Xo8MAG4IHcb5UXQO6tvt9ZlsM4A2j+Rw==",
+      "dependencies": [
+        "@preact/signals-core",
+        "preact"
+      ]
+    },
+    "preact@10.26.3": {
+      "integrity": "sha512-OJCfNTdttkOTCbTN+gCnXn/woDqz1dIjvP+gdCoYGP2kKuX6w79FAP8qgY/r7jgAunvqHVVmEOKzKOFWzrXZdw=="
+    }
+  },
   "workspace": {
     "dependencies": [
-      "jsr:@deno-plc/adapter-tcp@^1.0.2",
-      "jsr:@deno-plc/slip@^1.2.1",
-      "jsr:@std/assert@^0.224.0"
+      "jsr:@deno-plc/adapter-tcp@^1.1.0",
+      "jsr:@deno-plc/slip@^1.3.0",
+      "jsr:@std/assert@^1.0.11"
     ]
   }
 }
