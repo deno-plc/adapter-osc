@@ -6,22 +6,17 @@
         "indentWidth": 4
     },
     "tasks": {
-        "check": "deno fmt && deno lint && deno check mod.ts && deno test --parallel",
-        "check-ci": "deno fmt --check && deno lint && deno check mod.ts && deno test --parallel"
-    },
-    "lint": {
-        "rules": {
-            "exclude": [
-                "no-inferrable-types"
-            ]
-        }
+        "check": "deno fmt && deno lint --fix && deno check mod.ts && deno publish --allow-dirty --dry-run && deno test --parallel",
+        "check-ci": "deno fmt --check && deno lint && deno check mod.ts && deno publish --allow-dirty --dry-run && deno test --parallel"
     },
     "publish": {
         "exclude": [
             "examples",
-            "*.bench.ts",
-            "*.test.ts",
-            "*.slow.ts"
+            ".vscode",
+            ".github",
+            "src/*.bench.ts",
+            "src/*.test.ts",
+            "src/*.slow.ts"
         ]
     },
     "imports": {

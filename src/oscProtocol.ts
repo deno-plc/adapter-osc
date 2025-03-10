@@ -21,7 +21,14 @@
 import { assert } from "@std/assert/assert";
 import { ASCII } from "./ascii.ts";
 
+/**
+ * An OSC argument. Can be a string, number, boolean or a binary blob.
+ */
 export type OSCArg = string | number | boolean | Uint8Array;
+
+/**
+ * An array of OSC arguments
+ */
 export type OSCArgs = readonly OSCArg[];
 
 /**

@@ -18,6 +18,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+export {
+    decodeOSC,
+    encodeOSC,
+    encodeOSC_UTF8,
+    OSCProtocolError,
+} from "./src/oscProtocol.ts";
+export type { OSCArg, OSCArgs, OSCEncoderOptions } from "./src/oscProtocol.ts";
+
 import type {
     TCPAdapterCallback,
     TCPAdapterSession,
@@ -25,8 +33,6 @@ import type {
 import { decodeOSC, type OSCArgs } from "./src/oscProtocol.ts";
 import { encodeSLIP, SLIPDecoder } from "@deno-plc/slip";
 import { encodeOSC } from "./src/oscProtocol.ts";
-export { decodeOSC, encodeOSC, OSCProtocolError } from "./src/oscProtocol.ts";
-export type { OSCArg, OSCArgs } from "./src/oscProtocol.ts";
 
 /**
  * OSC-over-TCP with SLIP framing
